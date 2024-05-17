@@ -19,134 +19,75 @@ def init(data_path: str):
         trie.insert(key)
 
 
-def parse_ipa(text: str) -> []:
+def process_chunk(chunk, output, text_val):
     """
-    Sentence to ipa, validation text, unknown char
+    Processes chunks of text that may or may not correspond to phrases or words in the dictionaries.
     """
-    phrase_found = []
-    ipa_list = []
-    text_val = ""
-    chunk = ""
-    unknown_char = []
+    chunk_origin = chunk
+    chunk = chunk.lower()
+    if chunk in phrase_dict:
+        output.append((chunk_origin, phrase_dict[chunk]))
+        text_val += chunk_origin
+    else:
+        for cc in chunk:
+            cc_origin = cc
+            cc = cc.lower()
+            if cc in word_dict:
+                output.append((cc_origin, word_dict[cc]))
+                text_val += cc_origin
+            else:
+                output.append((cc_origin, None))
+    return text_val
+
+
+def process_character(c, output, text_val):
+    """
+    Processes individual characters, managing punctuation and unknown characters.
+    """
+    c_origin = c
+    c = c.lower()
+    if c in word_dict:
+        output.append((c_origin, word_dict[c]))
+        text_val += c_origin
+    elif c in punctuation:
+        output.append((c_origin, c_origin))
+        text_val += c_origin
+    else:
+        output.append((c_origin, None))
+    return text_val
+
+
+def parse_ipa(text: str):
+    """
+    Converts a given text to International Phonetic Alphabet (IPA) notation.
+    Handles continuous phrases and individual characters, managing punctuation and unknowns.
+    """
     text = text.strip()
     output = []
+    text_val = ""
+    chunk = ""
+    trie.reset_search()
 
-    for i in range(len(text)):
-        c = text[i]
+    for c in text:
         if trie.char_search(c):
             chunk += c
         else:
-            # c is not part of phrase or indicate end of phrase
-            if len(chunk):
-                # handle end of phrase, c triggered end of phrase
-                if chunk in phrase_dict:
-                    # chunk found in phrase dictionary
-                    # append to phrase dict and clean up
-                    phrase_found.append(chunk)
-                    grp = (chunk, phrase_dict[chunk],)
-                    output.append(grp)
-                    text_val += chunk
-                    chunk = ""
-                    trie.reset_search()
-                else:
-                    for cc in chunk:
-                        # chunk is not in phrase dict
-                        if cc in word_dict:
-                            # chunk is in word dict
-                            grp = (cc, word_dict[cc],)
-                            output.append(grp)
-                            text_val += cc
-                        else:
-                            unknown = (cc, None,)
-                            output.append(unknown)
-                    chunk = ""
-                    trie.reset_search()
+            if chunk:
+                text_val = process_chunk(chunk, output, text_val)
+                chunk = ""  # Reset chunk after processing
+                trie.reset_search()
 
-                # handle character c
-                # chat is c is part of another phrase
-                if trie.char_search(c):
-                    # c is part of phrase
-                    chunk += c
-                elif c in word_dict:
-                    # c is not part of phrase
-                    grp = (c, word_dict[c],)
-                    output.append(grp)
-                    text_val += c
-                elif c in punctuation:
-                    # c is punctuation
-                    grp = (c, c,)
-                    output.append(grp)
-                    text_val += c
-                else:
-                    unknown = (c, None,)
-                    output.append(unknown)
-            else:
-                # single word and chunk currently empty
-                if c in word_dict:
-                    grp = (c, word_dict[c],)
-                    output.append(grp)
-                    text_val += c
-                elif c in punctuation:
-                    # c is punctuation
-                    grp = (c, c,)
-                    output.append(grp)
-                    text_val += c
-                else:
-                    unknown = (c, None,)
-                    output.append(unknown)
+            # Handle the current character if the chunk is interrupted or empty
+            text_val = process_character(c, output, text_val)
+            trie.reset_search()  # Reset after a failed trie search
 
-    # iterated all characters
-    # flush data in chunk
-    remain_size = len(chunk)
-    if remain_size == 1:
-        # chunk is a character
-        if chunk in word_dict:
-            grp = (chunk, word_dict[chunk])
-            output.append(grp)
-            text_val += chunk
-        elif chunk in word_dict:
-            # chunk is not part of phrase
-            grp = (chunk, word_dict[chunk],)
-            output.append(grp)
-            text_val += chunk
-        elif chunk in punctuation:
-            # chunk is punctuation
-            grp = (chunk, chunk,)
-            output.append(grp)
-            text_val += chunk
-        else:
-            unknown = (chunk, None,)
-            output.append(unknown)
-    elif remain_size > 1:
-        if chunk in phrase_dict:
-            grp = (chunk, phrase_dict[chunk])
-            output.append(grp)
-            text_val += chunk
-        else:
-            for cc in chunk:
-                if cc in word_dict:
-                    # chunk is in word dict
-                    grp = (cc, word_dict[cc],)
-                    output.append(grp)
-                    text_val += cc
-                else:
-                    unknown = (cc, None,)
-                    output.append(unknown)
-    trie.reset_search()
+    # Handle any remaining data in 'chunk' after processing all characters in 'text'
+    if chunk:
+        text_val = process_chunk(chunk, output, text_val)
+        chunk = ""  # Clear the chunk after processing
+        trie.reset_search()
 
-    # export ipa list, text for validation, unknown characters
     return output
-
-
-def flatten(ipa_list) -> str:
-    """
-    Merge ipa to string
-    """
-    output = []
-    for pair in ipa_list:
-        output.extend(pair[1])
-    ipa_text = " ".join(output).replace("/", "").replace("  ", " ")
-    return ipa_text
 
 
 def number_to_cantonese(text):
@@ -156,25 +97,7 @@ def number_to_cantonese(text):
 def convert(text: str):
     # convert numbers to number reading
     text = number_to_cantonese(text)
-
     return parse_ipa(text)
-
-
-def merge(path_1, path_2, output_path: str):
-    """
-    Merge 2 yue database, export new one
-    """
-    with open(path_1, "r", encoding="utf8") as f:
-        f1 = f.read()
-
-    with open(path_2, "r", encoding="utf8") as f:
-        f2 = f.read()
-    f2 = f2.replace("   ", "\2")
-
-    output = (f1 + "\n" + f2).replace("\n\n", "\n").lower()
-    with open(output_path, "w", encoding="utf8") as f:
-        f.write(output)
-    pass
 
 
 def parse_text(text: str) -> []:
@@ -198,8 +121,6 @@ def parse_text(text: str) -> []:
         if len(line):
             line_data = line.split("\t")
             word = line_data[0]
-            if word == "你好":
-                pass
             ipa_tag = line_data[1].split(", ")
             if len(ipa_tag) > 1:
                 ipa_tag = [ipa_tag[0]]

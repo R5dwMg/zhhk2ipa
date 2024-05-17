@@ -90,50 +90,82 @@ def parse_ipa(text: str):
     return output
 
 
-def number_to_cantonese(text):
+def number_to_reading(text: str) -> str:
+    """
+    Converts numerical values in the text to their Chinese character readings.
+
+    Args:
+        text (str): The input text containing numerical values.
+
+    Returns:
+        str: The modified text where all numbers are converted to their Chinese numeral readings.
+    """
+    # Regex to find all numerical expressions in the text and replace them using cn2an.
     return re.sub(r'\d+(?:\.?\d+)?', lambda x: cn2an.an2cn(x.group()), text)
 
 
-def convert(text: str):
-    # convert numbers to number reading
-    text = number_to_cantonese(text)
+def convert(text: str) -> []:
+    """
+    Converts a given text into IPA notation after converting all numerical values
+    to their Chinese character readings.
+
+    Args:
+        text (str): The input text possibly containing numerical values.
+
+    Returns:
+        tuple: Returns two dictionaries containing the IPA mappings for single characters and phrases.
+    """
+    # First convert numbers in the text to their Chinese numeral readings.
+    text = number_to_reading(text)
+
+    # Then parse the text to extract IPA notations for words and phrases.
     return parse_ipa(text)
 
 
-def parse_text(text: str) -> []:
+def parse_text(text: str) -> tuple:
     """
-    Put data to dictionary
+    Parses a given text string to populate dictionaries for individual words and phrases with their
+    corresponding IPA (International Phonetic Alphabet) notations.
+
+    Args:
+        text (str): The raw input text containing words or phrases and their IPA notations,
+                    typically separated by tabs and different entries by newlines.
+
+    Returns:
+        tuple: A tuple containing two dictionaries:
+            - word_dict: Dictionary for single character words.
+            - phrase_dict: Dictionary for multiple character phrases.
     """
     global word_dict, phrase_dict
     word_dict = {}
     phrase_dict = {}
 
-    # clean up data
-    data = re.sub(r'\[.*?\]', '', text)
-    data = data.replace("/", "").replace("…", "").replace("，", "").replace("？", "").replace("！", "")
-    data = data.lower()
+    # Remove unwanted characters and normalize the data.
+    data = re.sub(r'\[.*?\]', '', text)  # Remove bracketed content.
+    # Remove various punctuation and special characters, then convert to lower case.
+    data = re.sub(r"[\/…，？！]", "", data).lower()
 
-    # split into lines
+    # Split the cleaned data into lines.
     data_lines = data.split("\n")
-    idx = 1
 
+    # Process each line to extract words and their corresponding IPA.
     for line in data_lines:
-        if len(line):
+        if line:
             line_data = line.split("\t")
-            word = line_data[0]
-            ipa_tag = line_data[1].split(", ")
-            if len(ipa_tag) > 1:
-                ipa_tag = [ipa_tag[0]]
-            temp = []
+            if len(line_data) < 2:
+                continue  # Skip lines that don't have the expected format.
 
-            for t in ipa_tag:
-                temp.extend(t.split(" "))
-                ipa_tag = temp
+            word, ipa_tag = line_data[0], line_data[1].split(", ")
+            # If multiple IPA entries exist, select only the first one.
+            ipa_tag = [ipa_tag[0]]
 
+            # Split IPA tags by spaces to handle multiple IPA components.
+            ipa_tag = [item for sub_tag in ipa_tag for item in sub_tag.split(" ")]
+
+            # Assign the parsed data to the appropriate dictionary.
             if len(word) == 1:
                 word_dict[word] = ipa_tag
             else:
                 phrase_dict[word] = ipa_tag
-        idx += 1
 
     return word_dict, phrase_dict
